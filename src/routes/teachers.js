@@ -54,9 +54,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
 		const { full_name, username, phone, school: newSchool, subject } = req.body
 		const update = { full_name, username, phone, school: newSchool, subject }
 
-		const updated = await Teacher.findByIdAndUpdate(targetId, update, { returnDocument: 'after' }).select(
-			'-password',
-		)
+		const updated = await Teacher.findByIdAndUpdate(targetId, update, {
+			returnDocument: 'after',
+		}).select('-password')
 		res.json(updated)
 	} catch (err) {
 		console.error(err)
@@ -142,6 +142,69 @@ router.post('/:id/reset-password', authenticateToken, async (req, res) => {
 	} catch (err) {
 		console.error(err)
 		res.status(500).json({ error: 'Ошибка сервера' })
+	}
+})
+
+// ============ GET /schools — Получить список всех школ ============
+router.get('/schools', authenticateToken, async (req, res) => {
+	try {
+		const { role } = req.user
+		let query = {}
+
+		// Если учитель — видит только свою школу
+		if (role === 'teacher') {
+			query = { school: req.user.school }
+		}
+		// Супер-админ видит все школы
+
+		const schools = await Teacher.distinct('school', query)
+		const schoolsWithIds = schools.map(school => ({
+			id: school.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+			name: school,
+		}))
+
+		res.json(schoolsWithIds)
+	} catch (err) {
+		console.error(err)
+		res.status(500).json({ error: 'Ошибка получения школ' })
+	}
+})
+
+// ============ POST /switch-school — Переключить школу ============
+router.post('/switch-school', authenticateToken, async (req, res) => {
+	try {
+		const { school } = req.body
+		const { id: userId, role } = req.user
+
+		if (role !== 'super_admin') {
+			return res.status(403).json({ error: 'Только администратор может переключать школы' })
+		}
+
+		// Проверяем, существует ли такая школа
+		const teachers = await Teacher.find({ school })
+		if (teachers.length === 0) {
+			return res.status(404).json({ error: 'Школа не найдена' })
+		}
+
+		// Обновляем текущего пользователя (меняем школу в сессии)
+		const user = await Teacher.findById(userId)
+		user.school = school
+		await user.save()
+
+		res.json({
+			message: 'Школа переключена',
+			school: school,
+			user: {
+				id: user._id,
+				full_name: user.full_name,
+				email: user.email,
+				role: user.role,
+				school: user.school,
+			},
+		})
+	} catch (err) {
+		console.error(err)
+		res.status(500).json({ error: 'Ошибка переключения школы' })
 	}
 })
 
