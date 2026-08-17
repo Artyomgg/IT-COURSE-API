@@ -17,15 +17,36 @@ const teacherSchema = new mongoose.Schema({
 		},
 	},
 	subject: { type: String, default: 'Информатика' },
-	role: { type: String, enum: ['teacher', 'super_admin'], default: 'teacher' },
+	role: {
+		type: String,
+		enum: ['teacher', 'school_admin', 'super_admin'],
+		default: 'teacher',
+	},
+	avatar: { type: String, default: '' },
 	is_active: { type: Boolean, default: true },
 	created_at: { type: Date, default: Date.now },
 	last_login: { type: Date },
 	login_count: { type: Number, default: 0 },
 })
 
+// Исправленный pre-save хук — БЕЗ next()
+teacherSchema.pre('save', async function () {
+	// Если пароль не изменился — пропускаем
+	if (!this.isModified('password')) return
+
+	// Хэшируем пароль
+	const salt = await bcrypt.genSalt(10)
+	this.password = await bcrypt.hash(this.password, salt)
+})
+
+// Метод сравнения паролей
 teacherSchema.methods.comparePassword = async function (candidatePassword) {
-	return await bcrypt.compare(candidatePassword, this.password)
+	try {
+		return await bcrypt.compare(candidatePassword, this.password)
+	} catch (error) {
+		console.error('Ошибка сравнения пароля:', error)
+		return false
+	}
 }
 
 const Teacher = mongoose.models.Teacher || mongoose.model('Teacher', teacherSchema)

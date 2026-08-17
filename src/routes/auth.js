@@ -1,10 +1,9 @@
-// server/src/routes/auth.js — обновлённая версия с поддержкой логина
-
 const express = require('express')
 const router = express.Router()
 const jwt = require('jsonwebtoken')
 const Teacher = require('../models/Teacher.js')
 const { authenticateToken } = require('../middleware/auth.js')
+const { createNotification } = require('../utils/notifications.js')
 
 // Вход (поддерживает и email, и username)
 router.post('/login', async (req, res) => {
@@ -12,7 +11,7 @@ router.post('/login', async (req, res) => {
 		const { email, password } = req.body
 		let teacher = null
 
-		// Если ввели email (содержит @)
+		// Если ввели email (содержит @) — ищем по email
 		if (email.includes('@')) {
 			teacher = await Teacher.findOne({ email })
 		} else {
@@ -67,7 +66,7 @@ router.post('/register', authenticateToken, async (req, res) => {
 	try {
 		const { full_name, username, email, phone, password, school, subject, role } = req.body
 
-		if (req.user.role !== 'super_admin') {
+		if (req.user.role !== 'super_admin' && req.user.role !== 'school_admin') {
 			return res.status(403).json({ error: 'Недостаточно прав' })
 		}
 
@@ -85,7 +84,7 @@ router.post('/register', authenticateToken, async (req, res) => {
 			phone,
 			password,
 			school,
-			subject,
+			subject: subject || 'Информатика',
 			role: role || 'teacher',
 			is_active: true,
 		})
@@ -93,6 +92,17 @@ router.post('/register', authenticateToken, async (req, res) => {
 
 		const teacherData = newTeacher.toObject()
 		delete teacherData.password
+
+		// ✅ Уведомление при добавлении учителя
+		await createNotification({
+			type: 'teacher_add',
+			title: '👨‍🏫 Добавлен новый учитель',
+			message: `Добавлен учитель: ${full_name} (${email}) в школу "${school}"`,
+			details: { userId: newTeacher._id, email, name: full_name, school },
+			targetRoles: ['super_admin', 'school_admin'],
+			targetSchool: school,
+			createdBy: req.user.id,
+		})
 
 		res.status(201).json({ message: 'Учитель создан', teacher: teacherData })
 	} catch (err) {
