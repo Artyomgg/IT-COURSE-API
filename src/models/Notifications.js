@@ -23,10 +23,12 @@ const notificationSchema = new mongoose.Schema({
 			'class_add',
 			'class_update',
 			'class_delete',
+			'school_request', // ✅ ДОБАВЛЕНО
+			'school_approved', // ✅ ДОБАВЛЕНО
+			'school_rejected', // ✅ ДОБАВЛЕНО
 		],
 		required: true,
 	},
-
 	title: { type: String, required: true },
 	message: { type: String, required: true },
 	details: { type: Object, default: {} },

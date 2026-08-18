@@ -2,10 +2,83 @@
 const express = require('express')
 const router = express.Router()
 const Test = require('../models/Test.js')
+const Teacher = require('../models/Teacher.js')
+const Permission = require('../models/Permission.js')
 const { authenticateToken } = require('../middleware/auth.js')
 
+// ============================================
+// ✅ СПЕЦИФИЧНЫЕ МАРШРУТЫ (ДОЛЖНЫ БЫТЬ ПЕРВЫМИ!)
+// ============================================
+
+// ============ GET /teachers — Публичный список учителей ============
+router.get('/teachers', async (req, res) => {
+	try {
+		const { school, search } = req.query
+
+		let query = { is_active: true }
+		if (school) query.school = school
+
+		let teachers = await Teacher.find(query)
+			.select('full_name email subject school role')
+			.sort('full_name')
+
+		teachers = teachers.filter(t => t.role !== 'super_admin')
+
+		const permissions = await Permission.find({
+			user_id: { $in: teachers.map(t => t._id) },
+		})
+
+		teachers = teachers.filter(teacher => {
+			const perm = permissions.find(p => p.user_id.toString() === teacher._id.toString())
+			if (!perm) return true
+			if (!perm.permissions) return true
+			if (perm.permissions.show_in_test_registration === undefined) return true
+			return perm.permissions.show_in_test_registration !== false
+		})
+
+		if (search) {
+			const searchLower = search.toLowerCase()
+			teachers = teachers.filter(
+				t =>
+					t.full_name.toLowerCase().includes(searchLower) ||
+					(t.subject && t.subject.toLowerCase().includes(searchLower)),
+			)
+		}
+
+		res.json(teachers)
+	} catch (err) {
+		console.error('❌ Ошибка получения публичных учителей:', err)
+		res.status(500).json({ error: 'Ошибка сервера' })
+	}
+})
+
+// ============ GET /metadata/:sectionId — Получить список тестов для раздела ============
+router.get('/metadata/:sectionId', async (req, res) => {
+	try {
+		const { sectionId } = req.params
+
+		const tests = await Test.find({ sectionId, isActive: true })
+			.select('id title description icon duration path questions')
+			.sort({ id: 1 })
+
+		const result = tests.map(test => ({
+			...test.toObject(),
+			questionsCount: test.questions?.length || 0,
+		}))
+
+		res.json(result)
+	} catch (err) {
+		console.error('❌ Ошибка получения метаданных тестов:', err)
+		res.status(500).json({ error: 'Ошибка сервера' })
+	}
+})
+
+// ============================================
+// ✅ ОБЩИЕ МАРШРУТЫ
+// ============================================
+
 // ============ GET / — Получить все тесты ============
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', async (req, res) => {
 	try {
 		const { sectionId, search } = req.query
 
@@ -21,9 +94,7 @@ router.get('/', authenticateToken, async (req, res) => {
 			]
 		}
 
-		const tests = await Test.find(query)
-			.sort({ sectionId: 1, id: 1 })
-			.populate('createdBy', 'full_name email')
+		const tests = await Test.find(query).sort({ sectionId: 1, id: 1 }).select('-createdBy')
 
 		res.json(tests)
 	} catch (err) {
@@ -33,10 +104,16 @@ router.get('/', authenticateToken, async (req, res) => {
 })
 
 // ============ GET /:id — Получить тест по ID ============
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', async (req, res) => {
 	try {
 		const { id } = req.params
-		const test = await Test.findOne({ id: parseInt(id) }).populate('createdBy', 'full_name email')
+		const testId = parseInt(id)
+
+		if (isNaN(testId)) {
+			return res.status(400).json({ error: 'Неверный ID теста' })
+		}
+
+		const test = await Test.findOne({ id: testId, isActive: true }).select('-createdBy')
 
 		if (!test) {
 			return res.status(404).json({ error: 'Тест не найден' })
@@ -48,6 +125,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
 		res.status(500).json({ error: 'Ошибка сервера' })
 	}
 })
+
+// ============================================
+// 🔒 АДМИНСКИЕ МАРШРУТЫ
+// ============================================
 
 // ============ POST / — Создать тест ============
 router.post('/', authenticateToken, async (req, res) => {
@@ -178,7 +259,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 	}
 })
 
-// ============ POST /import — Импорт тестов из JSON ============
+// ============ POST /import — Импорт тестов ============
 router.post('/import', authenticateToken, async (req, res) => {
 	try {
 		const { id: userId } = req.user
@@ -242,27 +323,6 @@ router.post('/import', authenticateToken, async (req, res) => {
 		})
 	} catch (err) {
 		console.error('❌ Ошибка импорта тестов:', err)
-		res.status(500).json({ error: 'Ошибка сервера' })
-	}
-})
-
-// ============ GET /metadata/:sectionId — Получить список тестов для раздела ============
-router.get('/metadata/:sectionId', async (req, res) => {
-	try {
-		const { sectionId } = req.params
-
-		const tests = await Test.find({ sectionId, isActive: true })
-			.select('id title description icon duration path questions')
-			.sort({ id: 1 })
-
-		const result = tests.map(test => ({
-			...test.toObject(),
-			questionsCount: test.questions?.length || 0,
-		}))
-
-		res.json(result)
-	} catch (err) {
-		console.error('❌ Ошибка получения метаданных тестов:', err)
 		res.status(500).json({ error: 'Ошибка сервера' })
 	}
 })
