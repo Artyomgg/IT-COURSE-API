@@ -1,10 +1,12 @@
 // server/src/utils/email.js
 const nodemailer = require('nodemailer')
 
+console.log('📧 Загрузка email модуля...')
+
 const transporter = nodemailer.createTransport({
-	host: process.env.SMTP_HOST || 'smtp.gmail.com',
-	port: parseInt(process.env.SMTP_PORT) || 587,
-	secure: false,
+	host: process.env.SMTP_HOST || 'smtp.yandex.ru',
+	port: parseInt(process.env.SMTP_PORT) || 465,
+	secure: true, // ✅ Для Яндекса (порт 465)
 	auth: {
 		user: process.env.SMTP_USER,
 		pass: process.env.SMTP_PASS,
@@ -19,6 +21,8 @@ const sendSchoolApprovalEmail = async ({
 	adminPassword,
 	loginLink,
 }) => {
+	console.log(`📧 Попытка отправки email на ${to}...`)
+
 	const html = `
 	<!DOCTYPE html>
 	<html>
@@ -64,7 +68,7 @@ const sendSchoolApprovalEmail = async ({
 				</ul>
 
 				<p style="margin-top: 20px; color: #666;">
-					Если у вас есть вопросы: <a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}</a>
+					Если у вас есть вопросы: <a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}">${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}</a>
 				</p>
 
 				<div class="footer">
@@ -77,15 +81,24 @@ const sendSchoolApprovalEmail = async ({
 	</html>
 	`
 
-	await transporter.sendMail({
-		from: process.env.SMTP_FROM || '"IT-COURSE" <itcourse.edu@gmail.com>',
-		to: to,
-		subject: `🎉 ${schoolName} зарегистрирована на IT-COURSE!`,
-		html: html,
-	})
+	try {
+		const info = await transporter.sendMail({
+			from: process.env.SMTP_FROM || '"IT-COURSE" <itcourseedu@yandex.by>',
+			to: to,
+			subject: `🎉 ${schoolName} зарегистрирована на IT-COURSE!`,
+			html: html,
+		})
+		console.log('✅ Email отправлен! MessageId:', info.messageId)
+		return { success: true, messageId: info.messageId }
+	} catch (error) {
+		console.error('❌ Ошибка отправки email:', error.message)
+		return { success: false, error: error.message }
+	}
 }
 
 const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
+	console.log(`📧 Попытка отправки email об отказе на ${to}...`)
+
 	const html = `
 	<!DOCTYPE html>
 	<html>
@@ -108,7 +121,7 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 				<p>К сожалению, ваша заявка на регистрацию школы <strong>${schoolName}</strong> была отклонена.</p>
 				${reason ? `<p><strong>Причина:</strong> ${reason}</p>` : ''}
 				<p>Если вы считаете, что это ошибка, свяжитесь с нами:</p>
-				<p><a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}</a></p>
+				<p><a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}">${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}</a></p>
 				<div class="footer">
 					<p>© 2026 IT-COURSE • Образовательная платформа</p>
 				</div>
@@ -118,21 +131,29 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 	</html>
 	`
 
-	await transporter.sendMail({
-		from: process.env.SMTP_FROM || '"IT-COURSE" <itcourse.edu@gmail.com>',
-		to: to,
-		subject: `❌ Заявка на регистрацию ${schoolName} отклонена`,
-		html: html,
-	})
+	try {
+		const info = await transporter.sendMail({
+			from: process.env.SMTP_FROM || '"IT-COURSE" <itcourseedu@yandex.by>',
+			to: to,
+			subject: `❌ Заявка на регистрацию ${schoolName} отклонена`,
+			html: html,
+		})
+		console.log('✅ Email об отказе отправлен!')
+		return { success: true }
+	} catch (error) {
+		console.error('❌ Ошибка отправки email об отказе:', error.message)
+		return { success: false, error: error.message }
+	}
 }
 
 const testEmailConnection = async () => {
 	try {
 		await transporter.verify()
-		console.log('✅ Email (Gmail) настроен успешно!')
+		console.log('✅ Email (Yandex) настроен успешно!')
 		return true
 	} catch (error) {
 		console.error('❌ Ошибка настройки email:', error.message)
+		console.error('   Проверь SMTP_USER и SMTP_PASS в .env')
 		return false
 	}
 }
