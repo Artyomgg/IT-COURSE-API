@@ -3,7 +3,9 @@ require('dotenv').config()
 const express = require('express')
 const mongoose = require('mongoose')
 const cors = require('cors')
-const { testEmailConnection } = require('./src/utils/email.js')
+
+// ❌ УДАЛЯЕМ EMAIL
+// const { testEmailConnection } = require('./src/utils/email.js')
 
 // ===== ИМПОРТ МАРШРУТОВ =====
 const authRoutes = require('./src/routes/auth')
@@ -31,10 +33,8 @@ mongoose
 	.connect(process.env.MONGODB_URI)
 	.then(async () => {
 		console.log('✅ MongoDB Atlas подключена')
-
-		// Проверяем email
-		await testEmailConnection()
-
+		// ❌ УДАЛЯЕМ ПРОВЕРКУ EMAIL
+		// await testEmailConnection()
 		console.log('🚀 Сервер готов к работе')
 	})
 	.catch(err => console.error('❌ Ошибка подключения к MongoDB:', err))
