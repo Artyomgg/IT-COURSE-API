@@ -1,12 +1,16 @@
 // server/src/utils/email.js
 const nodemailer = require('nodemailer')
+const dns = require('dns')
 
-console.log('📧 Загрузка email модуля...')
+// ✅ Принудительно используем IPv4 (фикс для Render)
+dns.setDefaultResultOrder('ipv4first')
+
+console.log('📧 Загрузка email модуля (Yandex)...')
 
 const transporter = nodemailer.createTransport({
 	host: process.env.SMTP_HOST || 'smtp.yandex.ru',
 	port: parseInt(process.env.SMTP_PORT) || 465,
-	secure: true, // ✅ Для Яндекса (порт 465)
+	secure: true,
 	auth: {
 		user: process.env.SMTP_USER,
 		pass: process.env.SMTP_PASS,
@@ -92,6 +96,7 @@ const sendSchoolApprovalEmail = async ({
 		return { success: true, messageId: info.messageId }
 	} catch (error) {
 		console.error('❌ Ошибка отправки email:', error.message)
+		if (error.code) console.error('   Код ошибки:', error.code)
 		return { success: false, error: error.message }
 	}
 }
@@ -142,6 +147,7 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 		return { success: true }
 	} catch (error) {
 		console.error('❌ Ошибка отправки email об отказе:', error.message)
+		if (error.code) console.error('   Код ошибки:', error.code)
 		return { success: false, error: error.message }
 	}
 }
@@ -153,6 +159,7 @@ const testEmailConnection = async () => {
 		return true
 	} catch (error) {
 		console.error('❌ Ошибка настройки email:', error.message)
+		if (error.code) console.error('   Код ошибки:', error.code)
 		console.error('   Проверь SMTP_USER и SMTP_PASS в .env')
 		return false
 	}
