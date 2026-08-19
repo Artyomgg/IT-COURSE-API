@@ -1,9 +1,17 @@
 // server/src/utils/email.js
-const { Resend } = require('resend')
+const nodemailer = require('nodemailer')
 
-console.log('📧 Загрузка email модуля (Resend)...')
+console.log('📧 Загрузка email модуля (Mail.ru)...')
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const transporter = nodemailer.createTransport({
+	host: process.env.SMTP_HOST || 'smtp.mail.ru',
+	port: parseInt(process.env.SMTP_PORT) || 465,
+	secure: true,
+	auth: {
+		user: process.env.SMTP_USER,
+		pass: process.env.SMTP_PASS,
+	},
+})
 
 const sendSchoolApprovalEmail = async ({
 	to,
@@ -13,7 +21,7 @@ const sendSchoolApprovalEmail = async ({
 	adminPassword,
 	loginLink,
 }) => {
-	console.log(`📧 Попытка отправки email на ${to}...`)
+	console.log(`📧 Отправка email на ${to}...`)
 
 	const html = `
 	<!DOCTYPE html>
@@ -60,7 +68,7 @@ const sendSchoolApprovalEmail = async ({
 				</ul>
 
 				<p style="margin-top: 20px; color: #666;">
-					Если у вас есть вопросы: <a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}">${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}</a>
+					Если у вас есть вопросы: <a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}</a>
 				</p>
 
 				<div class="footer">
@@ -74,28 +82,23 @@ const sendSchoolApprovalEmail = async ({
 	`
 
 	try {
-		const { data, error } = await resend.emails.send({
-			from: process.env.SMTP_FROM || 'IT-COURSE <onboarding@resend.dev>',
-			to: [to],
+		const info = await transporter.sendMail({
+			from: process.env.SMTP_FROM || '"IT-COURSE" <itcourse.edu@mail.ru>',
+			to: to,
 			subject: `🎉 ${schoolName} зарегистрирована на IT-COURSE!`,
 			html: html,
 		})
-
-		if (error) {
-			console.error('❌ Ошибка Resend:', error)
-			return { success: false, error: error.message }
-		}
-
-		console.log('✅ Email отправлен! ID:', data?.id)
-		return { success: true, id: data?.id }
+		console.log('✅ Email отправлен! MessageId:', info.messageId)
+		return { success: true }
 	} catch (error) {
 		console.error('❌ Ошибка отправки email:', error.message)
+		if (error.code) console.error('   Код:', error.code)
 		return { success: false, error: error.message }
 	}
 }
 
 const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
-	console.log(`📧 Попытка отправки email об отказе на ${to}...`)
+	console.log(`📧 Отправка email об отказе на ${to}...`)
 
 	const html = `
 	<!DOCTYPE html>
@@ -119,7 +122,7 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 				<p>К сожалению, ваша заявка на регистрацию школы <strong>${schoolName}</strong> была отклонена.</p>
 				${reason ? `<p><strong>Причина:</strong> ${reason}</p>` : ''}
 				<p>Если вы считаете, что это ошибка, свяжитесь с нами:</p>
-				<p><a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}">${process.env.SUPPORT_EMAIL || 'itcourseedu@yandex.by'}</a></p>
+				<p><a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}</a></p>
 				<div class="footer">
 					<p>© 2026 IT-COURSE • Образовательная платформа</p>
 				</div>
@@ -130,20 +133,14 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 	`
 
 	try {
-		const { data, error } = await resend.emails.send({
-			from: process.env.SMTP_FROM || 'IT-COURSE <onboarding@resend.dev>',
-			to: [to],
+		const info = await transporter.sendMail({
+			from: process.env.SMTP_FROM || '"IT-COURSE" <itcourse.edu@mail.ru>',
+			to: to,
 			subject: `❌ Заявка на регистрацию ${schoolName} отклонена`,
 			html: html,
 		})
-
-		if (error) {
-			console.error('❌ Ошибка Resend:', error)
-			return { success: false, error: error.message }
-		}
-
-		console.log('✅ Email об отказе отправлен! ID:', data?.id)
-		return { success: true, id: data?.id }
+		console.log('✅ Email об отказе отправлен!')
+		return { success: true }
 	} catch (error) {
 		console.error('❌ Ошибка отправки email об отказе:', error.message)
 		return { success: false, error: error.message }
@@ -152,15 +149,11 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 
 const testEmailConnection = async () => {
 	try {
-		// Просто проверяем, что ключ есть
-		if (!process.env.RESEND_API_KEY) {
-			console.error('❌ RESEND_API_KEY не найден в .env')
-			return false
-		}
-		console.log('✅ Resend настроен успешно!')
+		await transporter.verify()
+		console.log('✅ Mail.ru настроен успешно!')
 		return true
 	} catch (error) {
-		console.error('❌ Ошибка настройки Resend:', error.message)
+		console.error('❌ Ошибка настройки Mail.ru:', error.message)
 		return false
 	}
 }
