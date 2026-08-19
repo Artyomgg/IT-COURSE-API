@@ -3,13 +3,23 @@ const nodemailer = require('nodemailer')
 
 console.log('📧 Загрузка email модуля (Mail.ru)...')
 
+// ✅ ФОРСИРУЕМ IPv4
 const transporter = nodemailer.createTransport({
-	host: process.env.SMTP_HOST || 'smtp.mail.ru',
-	port: parseInt(process.env.SMTP_PORT) || 465,
+	host: 'smtp.mail.ru',
+	port: 465,
 	secure: true,
 	auth: {
 		user: process.env.SMTP_USER,
 		pass: process.env.SMTP_PASS,
+	},
+	// ✅ ОТКЛЮЧАЕМ IPv6
+	family: 4,
+	// ✅ Добавляем таймауты
+	connectionTimeout: 15000,
+	socketTimeout: 15000,
+	// ✅ Отключаем TLS проверку (для Mail.ru)
+	tls: {
+		rejectUnauthorized: false,
 	},
 })
 
@@ -68,7 +78,7 @@ const sendSchoolApprovalEmail = async ({
 				</ul>
 
 				<p style="margin-top: 20px; color: #666;">
-					Если у вас есть вопросы: <a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}</a>
+					Если у вас есть вопросы: <a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}</a>
 				</p>
 
 				<div class="footer">
@@ -92,7 +102,8 @@ const sendSchoolApprovalEmail = async ({
 		return { success: true }
 	} catch (error) {
 		console.error('❌ Ошибка отправки email:', error.message)
-		if (error.code) console.error('   Код:', error.code)
+		if (error.code) console.error('   Код ошибки:', error.code)
+		if (error.response) console.error('   Ответ сервера:', error.response)
 		return { success: false, error: error.message }
 	}
 }
@@ -122,7 +133,7 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 				<p>К сожалению, ваша заявка на регистрацию школы <strong>${schoolName}</strong> была отклонена.</p>
 				${reason ? `<p><strong>Причина:</strong> ${reason}</p>` : ''}
 				<p>Если вы считаете, что это ошибка, свяжитесь с нами:</p>
-				<p><a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@mail.ru'}</a></p>
+				<p><a href="mailto:${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}">${process.env.SUPPORT_EMAIL || 'itcourse.edu@gmail.com'}</a></p>
 				<div class="footer">
 					<p>© 2026 IT-COURSE • Образовательная платформа</p>
 				</div>
@@ -154,6 +165,8 @@ const testEmailConnection = async () => {
 		return true
 	} catch (error) {
 		console.error('❌ Ошибка настройки Mail.ru:', error.message)
+		console.error('   Проверьте SMTP_USER и SMTP_PASS в .env')
+		console.error('   Или проблема с IPv6 -> используем IPv4')
 		return false
 	}
 }
