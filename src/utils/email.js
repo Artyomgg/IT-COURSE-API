@@ -1,21 +1,9 @@
 // server/src/utils/email.js
-const nodemailer = require('nodemailer')
-const dns = require('dns')
+const { Resend } = require('resend')
 
-// ✅ Принудительно используем IPv4 (фикс для Render)
-dns.setDefaultResultOrder('ipv4first')
+console.log('📧 Загрузка email модуля (Resend)...')
 
-console.log('📧 Загрузка email модуля (Yandex)...')
-
-const transporter = nodemailer.createTransport({
-	host: process.env.SMTP_HOST || 'smtp.yandex.ru',
-	port: parseInt(process.env.SMTP_PORT) || 465,
-	secure: true,
-	auth: {
-		user: process.env.SMTP_USER,
-		pass: process.env.SMTP_PASS,
-	},
-})
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 const sendSchoolApprovalEmail = async ({
 	to,
@@ -86,17 +74,22 @@ const sendSchoolApprovalEmail = async ({
 	`
 
 	try {
-		const info = await transporter.sendMail({
-			from: process.env.SMTP_FROM || '"IT-COURSE" <itcourseedu@yandex.by>',
-			to: to,
+		const { data, error } = await resend.emails.send({
+			from: process.env.SMTP_FROM || 'IT-COURSE <onboarding@resend.dev>',
+			to: [to],
 			subject: `🎉 ${schoolName} зарегистрирована на IT-COURSE!`,
 			html: html,
 		})
-		console.log('✅ Email отправлен! MessageId:', info.messageId)
-		return { success: true, messageId: info.messageId }
+
+		if (error) {
+			console.error('❌ Ошибка Resend:', error)
+			return { success: false, error: error.message }
+		}
+
+		console.log('✅ Email отправлен! ID:', data?.id)
+		return { success: true, id: data?.id }
 	} catch (error) {
 		console.error('❌ Ошибка отправки email:', error.message)
-		if (error.code) console.error('   Код ошибки:', error.code)
 		return { success: false, error: error.message }
 	}
 }
@@ -137,30 +130,37 @@ const sendSchoolRejectionEmail = async ({ to, schoolName, reason }) => {
 	`
 
 	try {
-		const info = await transporter.sendMail({
-			from: process.env.SMTP_FROM || '"IT-COURSE" <itcourseedu@yandex.by>',
-			to: to,
+		const { data, error } = await resend.emails.send({
+			from: process.env.SMTP_FROM || 'IT-COURSE <onboarding@resend.dev>',
+			to: [to],
 			subject: `❌ Заявка на регистрацию ${schoolName} отклонена`,
 			html: html,
 		})
-		console.log('✅ Email об отказе отправлен!')
-		return { success: true }
+
+		if (error) {
+			console.error('❌ Ошибка Resend:', error)
+			return { success: false, error: error.message }
+		}
+
+		console.log('✅ Email об отказе отправлен! ID:', data?.id)
+		return { success: true, id: data?.id }
 	} catch (error) {
 		console.error('❌ Ошибка отправки email об отказе:', error.message)
-		if (error.code) console.error('   Код ошибки:', error.code)
 		return { success: false, error: error.message }
 	}
 }
 
 const testEmailConnection = async () => {
 	try {
-		await transporter.verify()
-		console.log('✅ Email (Yandex) настроен успешно!')
+		// Просто проверяем, что ключ есть
+		if (!process.env.RESEND_API_KEY) {
+			console.error('❌ RESEND_API_KEY не найден в .env')
+			return false
+		}
+		console.log('✅ Resend настроен успешно!')
 		return true
 	} catch (error) {
-		console.error('❌ Ошибка настройки email:', error.message)
-		if (error.code) console.error('   Код ошибки:', error.code)
-		console.error('   Проверь SMTP_USER и SMTP_PASS в .env')
+		console.error('❌ Ошибка настройки Resend:', error.message)
 		return false
 	}
 }
