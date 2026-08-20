@@ -52,6 +52,25 @@ app.use('/api/news', newsRoutes)
 app.use('/api/sections', sectionsRoutes)
 app.use('/api/school-requests', schoolRequestsRoutes)
 
+// ============================================
+// 🔥 HEALTH CHECK ДЛЯ UPTIMEROBOT
+// ============================================
+app.get('/health', (req, res) => {
+	res.json({
+		status: 'ok',
+		timestamp: new Date().toISOString(),
+		uptime: process.uptime(),
+		memory: process.memoryUsage(),
+	})
+})
+
+// ============================================
+// 🔥 PING ДЛЯ БЫСТРОЙ ПРОВЕРКИ
+// ============================================
+app.get('/ping', (req, res) => {
+	res.send('pong')
+})
+
 // ===== ОБРАБОТКА ОШИБОК =====
 app.use((err, req, res, next) => {
 	console.error('❌ Ошибка:', err.stack)
