@@ -3,9 +3,19 @@ const mongoose = require('mongoose')
 const bcrypt = require('bcryptjs')
 
 const teacherSchema = new mongoose.Schema({
-	full_name: { type: String, required: true },
-	username: { type: String, required: true, unique: true },
-	email: { type: String, required: true, unique: true, lowercase: true },
+	full_name: { type: String, required: true, trim: true },
+	username: {
+		type: String,
+		required: true,
+		unique: true,
+		trim: true,
+	},
+	email: {
+		type: String,
+		required: true,
+		unique: true,
+		trim: true,
+	},
 	phone: { type: String, default: '' },
 	password: { type: String, required: true },
 	school: { type: String, required: true },
@@ -29,17 +39,12 @@ const teacherSchema = new mongoose.Schema({
 	login_count: { type: Number, default: 0 },
 })
 
-// Исправленный pre-save хук — БЕЗ next()
 teacherSchema.pre('save', async function () {
-	// Если пароль не изменился — пропускаем
 	if (!this.isModified('password')) return
-
-	// Хэшируем пароль
 	const salt = await bcrypt.genSalt(10)
 	this.password = await bcrypt.hash(this.password, salt)
 })
 
-// Метод сравнения паролей
 teacherSchema.methods.comparePassword = async function (candidatePassword) {
 	try {
 		return await bcrypt.compare(candidatePassword, this.password)

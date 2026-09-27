@@ -5,15 +5,14 @@ const TestResult = require('../models/TestResult.js')
 const { authenticateToken } = require('../middleware/auth.js')
 
 // ============================================
-// ✅ ПУБЛИЧНЫЕ МАРШРУТЫ (без авторизации)
+// ✅ ПУБЛИЧНЫЕ МАРШРУТЫ
 // ============================================
 
-// ============ POST / — Создать результат (ПУБЛИЧНЫЙ) ============
+// ============ POST / — Создать результат ============
 router.post('/', async (req, res) => {
 	try {
 		const resultData = req.body
 
-		// Добавляем дату, если нет
 		if (!resultData.created_at) {
 			resultData.created_at = new Date()
 		}
@@ -28,17 +27,67 @@ router.post('/', async (req, res) => {
 	}
 })
 
+// ============ GET /students — Ученики (ПУБЛИЧНЫЙ, для подсказок) ============
+// Можно фильтровать только по школе, класс не обязателен
+router.get('/students', async (req, res) => {
+	try {
+		const { school, teacher } = req.query
+
+		const query = {}
+		if (school) query.school = school
+		if (teacher) query.teacher_name = teacher
+
+		const results = await TestResult.find(query).select(
+			'student_first_name student_last_name student_class',
+		)
+
+		// Уникальные по нормализованному ФИО
+		const seen = new Set()
+		const uniqueStudents = []
+		results.forEach(r => {
+			if (!r.student_first_name || !r.student_last_name) return
+			const key = `${r.student_last_name}_${r.student_first_name}`
+				.toLowerCase()
+				.replace(/\s+/g, ' ')
+				.trim()
+			if (!seen.has(key)) {
+				seen.add(key)
+				uniqueStudents.push({
+					first_name: r.student_first_name,
+					last_name: r.student_last_name,
+					class: r.student_class || '',
+				})
+			}
+		})
+
+		res.json(uniqueStudents)
+	} catch (err) {
+		console.error('❌ Ошибка получения учеников:', err)
+		res.status(500).json({ error: 'Ошибка сервера' })
+	}
+})
+
 // ============================================
-// 🔒 АДМИНСКИЕ МАРШРУТЫ (с authenticateToken)
+// 🔒 АДМИНСКИЕ МАРШРУТЫ
 // ============================================
 
-// ============ GET / — Получить все результаты ============
+// ============ GET / — Получить результаты (С ФИЛЬТРАЦИЕЙ ПО РОЛИ) ============
 router.get('/', authenticateToken, async (req, res) => {
 	try {
 		const { class: classFilter, testId, student, dateFrom, dateTo, testTitle } = req.query
 
 		let query = {}
 
+		// 🔥 ФИЛЬТРАЦИЯ ПО РОЛИ
+		if (req.user.role === 'teacher') {
+			query.teacher_id = String(req.user.id)
+		} else if (req.user.role === 'school_admin') {
+			if (req.user.school) {
+				query.school = req.user.school
+			}
+		}
+
+		// Дополнительные фильтры
 		if (classFilter) query.student_class = classFilter
 		if (testId) query.test_id = parseInt(testId)
 		if (testTitle) query.test_title = { $regex: testTitle, $options: 'i' }
@@ -63,7 +112,7 @@ router.get('/', authenticateToken, async (req, res) => {
 	}
 })
 
-// ============ POST /batch — Создать несколько результатов ============
+// ============ POST /batch ============
 router.post('/batch', authenticateToken, async (req, res) => {
 	try {
 		const { results } = req.body
@@ -80,16 +129,24 @@ router.post('/batch', authenticateToken, async (req, res) => {
 	}
 })
 
-// ============ DELETE /:id — Удалить результат ============
+// ============ DELETE /:id ============
 router.delete('/:id', authenticateToken, async (req, res) => {
 	try {
 		const { id } = req.params
-		const result = await TestResult.findByIdAndDelete(id)
 
+		const result = await TestResult.findById(id)
 		if (!result) {
 			return res.status(404).json({ error: 'Результат не найден' })
 		}
 
+		if (req.user.role === 'teacher' && result.teacher_id !== String(req.user.id)) {
+			return res.status(403).json({ error: 'Нет прав на удаление' })
+		}
+		if (req.user.role === 'school_admin' && req.user.school && result.school !== req.user.school) {
+			return res.status(403).json({ error: 'Нет прав на удаление' })
+		}
+
+		await TestResult.findByIdAndDelete(id)
 		res.json({ message: 'Результат удалён' })
 	} catch (err) {
 		console.error('❌ Ошибка удаления:', err)
@@ -97,29 +154,39 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 	}
 })
 
-// ============ GET /metadata — Получить метаданные ============
+// ============ GET /metadata ============
 router.get('/metadata', authenticateToken, async (req, res) => {
 	try {
-		const results = await TestResult.find({})
+		let query = {}
+
+		if (req.user.role === 'teacher') {
+			query.teacher_id = String(req.user.id)
+		} else if (req.user.role === 'school_admin') {
+			if (req.user.school) query.school = req.user.school
+		}
+
+		const results = await TestResult.find(query)
 
 		const uniqueClasses = [...new Set(results.map(r => r.student_class).filter(Boolean))].sort()
 		const uniqueTests = [...new Set(results.map(r => r.test_id).filter(Boolean))].sort(
 			(a, b) => a - b,
 		)
 		const uniqueTestTitles = [...new Set(results.map(r => r.test_title).filter(Boolean))].sort()
+		const uniqueTeachers = [...new Set(results.map(r => r.teacher_name).filter(Boolean))].sort()
 
 		res.json({
 			uniqueClasses,
 			uniqueTests: uniqueTests.map(id => ({ id, title: `Тест #${id}` })),
 			uniqueTestTitles,
+			uniqueTeachers,
 		})
 	} catch (err) {
-		console.error('❌ Ошибка получения метаданных:', err)
+		console.error('❌ Ошибка метаданных:', err)
 		res.status(500).json({ error: 'Ошибка сервера' })
 	}
 })
 
-// ============ DELETE /clean — Очистка старых результатов ============
+// ============ DELETE /clean ============
 router.delete('/clean', authenticateToken, async (req, res) => {
 	try {
 		const { maxRecords = 10000, maxAgeDays = 180 } = req.query
@@ -130,16 +197,10 @@ router.delete('/clean', authenticateToken, async (req, res) => {
 		const count = await TestResult.countDocuments()
 
 		if (count <= parseInt(maxRecords)) {
-			return res.json({
-				message: 'Очистка не требуется',
-				deleted: 0,
-				total: count,
-			})
+			return res.json({ message: 'Очистка не требуется', deleted: 0, total: count })
 		}
 
 		const toDelete = count - parseInt(maxRecords)
-
-		// Находим старые записи
 		const oldResults = await TestResult.find({ created_at: { $lt: cutoffDate } })
 			.sort({ created_at: 1 })
 			.limit(toDelete)
